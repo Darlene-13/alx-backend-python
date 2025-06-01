@@ -10,9 +10,7 @@ from parameterized import parameterized
 from  typing import Any, Dict, Tuple
 from unittest.mock import patch
 from unittest.mock import Mock
-from utils import access_nested_map
-import memoize
-from utils import get_json
+from utils import access_nested_map, get_json, memoize
 
 # TASK 0: PARAMETERIZE A UNIT TEST FOR ACCESS_NESTED_MAP
 
@@ -72,7 +70,7 @@ class TestAccessNestedMap(unittest.TestCase):
             expected_exception: The exception type we expect to be raiseed.
         """
         # Use assertRaises context manager to test exception cases
-        with self.asserRaises(expected_exception):
+        with self.assertRaises(expected_exception):
             access_nested_map(nested_map, path)
 
 # TASK 2: MOCT HTTP calls for get_json_function
