@@ -80,8 +80,8 @@ class Message(models.Model):
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_messages')
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     message_body = models.TextField(max_length=10, choices = MESSAGES_TYPE_CHOICES, default='text')
-    file_url = models.URLField(blanlk=True, null=True)
-    sent_at = models.DateTimeField(auto_add_now=True)
+    file_url = models.URLField(blank=True, null=True)
+    sent_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'messages'
