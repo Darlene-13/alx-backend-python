@@ -7,7 +7,7 @@ from rest_framework_simplejwt.views import (
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework import status
-from rest_framework.decorators import api_view, perission_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framwork.response import Response
 from django.contrib.auth import authenticate
@@ -49,7 +49,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainSerializer
 
 @api_view(['POST'])
-@permission_classes([ALlowAny])
+@permission_classes([AllowAny])
 def register_user(request):
     """
     Register a new user and return JWT tokens
