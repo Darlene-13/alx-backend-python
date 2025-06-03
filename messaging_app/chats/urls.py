@@ -1,27 +1,27 @@
 # chats/urls.py
 
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from rest_framework_nested.routers import NestedDefaultRouter
+from rest_framework import routers
 from . import views
 
-# Create the main router for top-level resources
-router = DefaultRouter()
+# Create the DefaultRouter for automatic URL routing
+router = routers.DefaultRouter()
 router.register(r'users', views.UserViewSet, basename='user')
 router.register(r'conversations', views.ConversationViewSet, basename='conversation')
 router.register(r'messages', views.MessageViewSet, basename='message')
 
-# Create nested router for messages within conversations  
-conversations_router = NestedDefaultRouter(router, r'conversations', lookup='conversation')
-conversations_router.register(r'messages', views.MessageViewSet, basename='conversation-messages')
-
 # URL patterns
 urlpatterns = [
-    # Include the main router URLs
+    # Include the router URLs - this creates all the CRUD endpoints automatically
     path('', include(router.urls)),
     
-    # Include the nested router URLs  
-    path('', include(conversations_router.urls)),
+    # Custom nested routes for messages within conversations
+    path('conversations/<uuid:conversation_pk>/messages/', 
+         views.MessageViewSet.as_view({'get': 'list', 'post': 'create'}), 
+         name='conversation-messages-list'),
+    path('conversations/<uuid:conversation_pk>/messages/<uuid:pk>/', 
+         views.MessageViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), 
+         name='conversation-messages-detail'),
     
     # Custom authentication endpoints
     path('auth/login/', views.LoginView.as_view(), name='login'),
