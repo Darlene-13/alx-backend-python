@@ -28,12 +28,16 @@ class IsMessageSenderOrParticipant(permissions.BasePermissions):
     Custom permission to allow message sender or conversation participants to access messages
     """
     def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated
+    
+    def has_object_permission(self, request,obj,view):
         """
         Check for permissions based on actions
         Anyone can view messages if there are in the conversation
         Only sender can update/delete their own messages
         Participants can create new messages
         """
+
         if isinstance(obj, Message):
             # Check if user is a participant in the messages
             is_participant = obj.conversation.participants.filter(
