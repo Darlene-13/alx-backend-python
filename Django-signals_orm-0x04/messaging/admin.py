@@ -119,8 +119,57 @@ class MessageAdmin(admin.ModelAdmin):
 
 @admin.register(MessageHistory)
 class MessageHistoryAdmin(admin.ModelAdmin):
+    """
     
+    Admin interface for MessageHistroy model
+    This shows the complete history of all messsage edites
+    """
 
+    # Fields to display in the list view
+    list_display = ['message_info', 'content_preview', 'edited_at', 'edited_by']
+    
+    # Fields to filter by in the sidebar
+    list_filter = ['edited_at', 'edited_by', 'message__sender']
+    
+    # Fields to search by
+    search_fields = ['message__content', 'old_content', 'edited_by__username']
+    
+    # Fields that are read-only (history should not be editable)
+    readonly_fields = ['message', 'old_content', 'edited_at', 'edited_by', 'content_preview']
+    
+    # Add date hierarchy for easy navigation
+    date_hierarchy = 'edited_at'
+    
+    # Optimize database queries
+    list_select_related = ['message', 'edited_by', 'message__sender', 'message__receiver']
+
+    def message_info (self, obj):
+        # SHow information about the related message
+        if obj.message:
+            return format_html(
+                'Message # {} from <strong> {}</strong> to <strong>{}</strong>',
+                obj.messsage.id,
+                obj.message.sender.username,
+                obj.message.receiver.username
+            )
+        return "No message"
+    message_info.short_description = "Mesage Info"
+
+    def content_preview(self, obj):
+        # Show a preview of the old content
+        return obj.content_preview
+    content_preview.short_description = "Old Content Preview"
+
+    def has_add_permission(self, request, obj=None):
+        """
+        Disable adding history manually, as it should be automatic
+        """
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """
+        Disable deletion of history records to maintain audit trial"""
+        return False
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
@@ -130,16 +179,16 @@ class NotificationAdmin(admin.ModelAdmin):
     This will show all the newly created notifications in the admin interface
     """
     # Fields to display in the list view
-    list_display = ['user', 'content_preview', 'timestamp', 'is_read','related_message', 'edited_at', 'edited_by']
+    list_display = ['user', 'content_preview', 'timestamp', 'is_read','related_message']
 
     # Fields to filter by in the sidebar
-    list_filter = ['timestamp', 'is_read', 'user', 'edited_at', 'edited_by', 'message__sender']
+    list_filter = ['timestamp', 'is_read', 'user']
 
     # Fields to search by
-    search_fields = ['user_username', 'content', 'edited_by__username']
+    search_fields = ['user_username', 'content']
 
     # Fields that are read only
-    readonly_fields = ['timestamp', 'message', 'edited_by', 'edited_at', 'old_content', 'content_preview']
+    readonly_fields = ['timestamp']
 
     # Add date to hierarchy for easy navigation
     date_hierarchy = 'timestamp'
@@ -152,18 +201,29 @@ class NotificationAdmin(admin.ModelAdmin):
 
     def related_message(self, obj):
         if obj.message:
-            return f"Message from {obj.message.sender.username}"
+            edit_indicator = "(edited)"  if obj.message.edited else ""
+            return format_html (
+                'Message from <strong>{}</strong>{}',
+                obj.message.sender.username,
+                edit_indicator
+            )
         return "No related message"
-    related_message.short_description = 'Related Message'
+    
+    related_message.short_description = "Related Message"
 
+    # Custom admin actions
     def mark_as_read(self, request, queryset):
-        # Admin action to mark selected notification as read
-        updated = queryset.update(is_read= True)
+        """ Admin action to mark selected notifications as read"""
+
+        updated = queryset.update(is_read = True)
         self.message_user(request, f'{updated} notifications were marked as read.')
     mark_as_read.short_description = "Mark selected notifications as read"
 
-
     def mark_as_unread(self, request, queryset):
-        updated = queryset.update(is_read = False)
-        self.message_user(request, f"{updated} notifications were marked as unread")
-    mark_as_unread.short_description = "Mark selected notifications as unread"
+        """Admin action to mark selected notifications as unread"""
+        updated = queryset.updated(is_read = False)
+        self.message_user(request, f'{updated} notifications were marked as unread')
+    mark_as_unread.short_description = "Mark selcted notifications as unread"
+
+    # Register custom notifications
+    actions = [mark_as_read, mark_as_unread]
