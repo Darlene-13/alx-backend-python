@@ -1,8 +1,16 @@
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
-from .models import Message, Notification, MessageHistory
+from django.contrib.models import User
 from django.utils import timezone
+from django.db import transaction
+from .models import Message, Notification, MessageHistory
+import logging
 
+
+logger = logging.getLogger(__name__)
+
+
+@receiver(post_save, sender = User)
 @receiver(post_save, sender= Message)
 def create_notification(sender, instance, created, **kwargs):
     """

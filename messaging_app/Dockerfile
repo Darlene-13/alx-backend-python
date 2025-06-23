@@ -2,8 +2,8 @@
 FROM python:3.10
 
 # Set the environment variable to prevent python from writing pyc files and for unbuffered output with logs
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 #Set the working directory in the container
 WORKDIR /messaging_app
