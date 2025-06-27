@@ -39,3 +39,4 @@ EXPOSE 8000
 
 # Run the application
 ENTRYPOINT ["/messaging_app/entrypoint"]
+CMD ["python3", "manage.py", "runserver", "-p", "8000", "0.0.0.0"]

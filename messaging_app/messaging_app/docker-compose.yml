@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: messaging_app_db
+    restart: always
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+    # Persist MySQL data across container restarts
+    - mysql_data:/var/lib/mysql
+    #Options: Custom mysql configuration file
+    - .mysql/conf:/etc/mysql/conf.d
+    # Optional: Initialize database with custom scripts
+    - .mysql/init:/docker-entrypoint-initdb.data
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - messaging_network
+    
+  web:
+    build: .
+    container_name: messaging_app_web
+    restart: always
+    env_file: .env
+    ports:
+      - "8000:8000"
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    depends_on:
+      db: 
+        condition: service_healthy
+    volumes:
+    # Mount source code for development
+      - .:/app 
+    # Persist django static files
+      - static_volume:/app/media
+    # Persist django logs
+      - ./logs:/app/logs
+    networks:
+      - messaging_network
+
+# Define the named volumes for data persistence
+volumes:
+  mysql_data:
+    driver: local
+  static_volume:
+    driver: local
+
+# Define custom network
+networks:
+  messaging_network:
+    driver: bridge
