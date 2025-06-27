@@ -7,10 +7,10 @@ services:
     restart: always
     env_file: .env
     environment:
-      MYSQL_DATABASE: ${DB_NAME}
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: $DB{DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
       - "3306:3306"
     volumes:
@@ -28,16 +28,16 @@ services:
     build: .
     container_name: messaging_app_web
     restart: always
+    env_file: .env
+    depends_on:
+      - db
     ports:
       - "8000:8000"
     environment:
-      - DB_NAME = ${DB_NAME}
-      - DB_USER = ${DB_USER}
-      - DB_PASSWORD = ${DB_PASSWORD}
-      - DB_HOST=db
-      - DB_PORT=3306
-    depends_on:
-      -db
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
     # Mount source code for development
       - .:/app 
