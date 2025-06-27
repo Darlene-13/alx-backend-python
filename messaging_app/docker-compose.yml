@@ -5,7 +5,7 @@ services:
     image: mysql:8.0
     container_name: messaging_app_db
     restart: always
-    env_file: env
+    env_file: .env
     environment:
       MYSQL_DATABASE: ${DB_NAME}
       MYSQL_USER: ${DB_USER}
