@@ -8,11 +8,15 @@ ENV PYTHONUNBUFFERED=1
 #Set the working directory in the container
 WORKDIR /messaging_app
 
-#Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        postgresql-client \
-    && rm -rf /var/lib/apt/lists/*
+# Install MySQL dependencies and PostgreSQL client in one efficient layer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        default-libmysqlclient-dev \
+        libmariadb-dev \
+        build-essential \
+        libssl-dev \
+        libffi-dev && \
+        rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
 COPY requirements.txt /messaging_app/
@@ -23,11 +27,15 @@ RUN pip install -r requirements.txt
 # Copy project
 COPY . /messaging_app/
 
+#Create entrypoint script
+COPY entrypoint /messaging_app/entrypoint
+RUN chmod +x /messaging_app/entrypoint
+
 # Collect static files if needed
-RUN python manage.py collectstatic --noinput
+RUN python manage.py collectstatic --noinput || echo "Static files collection skipped"
 
 # Expose port 8000
 EXPOSE 8000
 
 # Run the application
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+ENTRYPOINT ["/messaging_app/entrypoint"]

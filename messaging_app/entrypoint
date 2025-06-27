@@ -1,0 +1,53 @@
+#!/bin/bash
+
+# Function to test MYSQL connection
+wait_for_mysql() {
+    echo "Waiting for MySQL to be ready..."
+
+    # Wait for MySQL port to be open
+    while ! nc -z db 3306; do
+        echo "MySQL is not ready yet. Retrying....."
+        sleep 2
+    done
+
+    echo "MySQL port is open and reading. Testing database connection....."
+
+    #Testing the actual database connection
+    python << END
+import os
+import time
+import MySQLdb
+from django.conf import settings
+
+max_attempts = 30
+attempt = 0
+
+while attempt < max_attempts:
+    try:
+        connection = MySQLdb.connect(
+            host='db',
+            user=os.environ.get('MYSQL_USER', 'messaging_user'),
+            password=os.environ.get('MYSQL_PASSWORD', '#Nasimiyu1'),
+            db=os.environ.get('MYSQL_DATABASE', 'messaging_app'),
+            port=3306
+        )
+        connection.close()
+        print("Database connection successful.")
+        break
+    except Exception as e:
+        attempt += 1
+        print(f"Attempt {attempt}/{max_attempts}: Could not connect to the database....")
+        if attempt < max_attempts:
+            time.sleep(2)
+        else:
+            print("Failed to connect to the database after maximum attempts")
+            exit(1)
+END
+}
+
+# Run the application
+wait_for_mysql
+
+# Hand ovet to CMD specified in Docker compose
+echo " Starting application...."
+exec "$@"
