@@ -1,0 +1,187 @@
+#!/bin/bash
+
+echo "=========================================="
+echo "    Kubernetes Local Cluster Setup       "
+echo "=========================================="
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Check and install kubectl if not present
+check_and_install_kubectl() {
+    if ! command_exists kubectl; then
+        echo "⚠️  kubectl not found. Installing kubectl..."
+
+        # Get the latest version number
+        KUBECTL_VERSION=$(curl -Ls https://dl.k8s.io/release/stable.txt)
+        echo "📦 Latest kubectl version is: $KUBECTL_VERSION"
+
+        # Construct download URL
+        KUBECTL_URL="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+        echo "⬇️  Downloading from: $KUBECTL_URL"
+
+        # Download the binary
+        curl -LO "$KUBECTL_URL"
+
+        # Check if file was downloaded
+        if [ -f kubectl ]; then
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+            echo "✅ kubectl installed successfully!"
+        else
+            echo "❌ Download failed. Attempting snap install as fallback..."
+            sudo snap install kubectl --classic
+        fi
+    else
+        echo "✅ kubectl is already installed"
+    fi
+
+    echo "🔧 kubectl version: $(kubectl version --client --short 2>/dev/null)"
+}
+
+# Check and install kubectl if not present
+check_and_install_kubectl() {
+    if ! command_exists kubectl; then
+        echo " kubectl not found. Installing kubectl..."
+        
+        # Download and install kubectl
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        
+        if [ $? -eq 0 ]; then
+            chmod +x kubectl
+            sudo mv kubectl /usr/local/bin/
+            echo " kubectl installed successfully!"
+        else
+            echo " Failed to download kubectl"
+            echo " Will use minikube kubectl instead"
+            USE_MINIKUBE_KUBECTL=true
+        fi
+    else
+        echo " kubectl is already installed"
+        USE_MINIKUBE_KUBECTL=false
+    fi
+    
+    # Test kubectl or set up minikube kubectl
+    if [ "$USE_MINIKUBE_KUBECTL" = true ] || ! command_exists kubectl; then
+        echo " Using minikube's built-in kubectl"
+        KUBECTL_CMD="minikube kubectl --"
+        USE_MINIKUBE_KUBECTL=true
+    else
+        echo " Using system kubectl"
+        KUBECTL_CMD="kubectl"
+        USE_MINIKUBE_KUBECTL=false
+        echo " kubectl version: $(kubectl version --client --short 2>/dev/null)"
+    fi
+}
+
+# Start Kubernetes cluster
+start_cluster() {
+    echo ""
+    echo " Starting Kubernetes cluster with minikube..."
+    echo "   This may take a few minutes on first run..."
+    
+    # Start minikube cluster
+    minikube start --driver=docker
+    
+    # Check if minikube started successfully
+    if [ $? -eq 0 ]; then
+        echo " Kubernetes cluster started successfully!"
+    else
+        echo " Failed to start Kubernetes cluster"
+        echo " Try running: minikube delete && minikube start"
+        exit 1
+    fi
+}
+
+# Verify that the cluster is running
+verify_cluster(){
+    echo ""
+    echo " Verifying that the cluster is running...."
+    echo "========================================="
+
+    kubectl cluster-info
+
+    if [ $? -eq 0 ]; then
+        echo ""
+        echo "Cluster verification is successful."
+    else
+        echo "Cluster verification failed."
+        exit 1
+    fi
+}
+
+# Retrieve available pods
+retrieve_pod(){
+    echo ""
+    echo "Retriving the available pods in the cluster..."
+    echo "=========================================="
+
+    echo "Pods in default namespace."
+    kubectl cluster-info
+
+    echo ""
+    echo "All pods in all namespaces."
+
+    kubectl get pods --all-namespaces
+
+    echo ""
+    echo "Pod retrieval completed!"
+
+}
+
+# Display useful information
+display_info() {
+    echo ""
+    echo "🎯 Cluster Status Summary:"
+    echo "=========================="
+    
+    echo "Cluster Status:"
+    minikube status
+    
+    echo ""
+    echo "Nodes:"
+    kubectl get nodes
+    
+    echo ""
+    echo "🔗 Useful Commands:"
+    echo "  minikube status           - Check cluster status"
+    echo "  minikube dashboard        - Open Kubernetes dashboard"
+    echo "  minikube stop            - Stop the cluster"
+    echo "  minikube delete          - Delete the cluster"
+    echo "  kubectl get pods         - List pods in default namespace"
+    echo "  kubectl get pods -A      - List all pods in all namespaces"
+    echo "  kubectl get services     - List services"
+    echo "  kubectl get deployments - List deployments"
+    
+    echo ""
+    echo "🎉 Kubernetes local cluster setup completed successfully!"
+}
+
+# Main execution
+main() {
+    echo "Starting Kubernetes setup process..."
+    echo ""
+    
+    # Step 1: Ensure minikube is installed
+    check_and_install_minikube
+    
+    # Step 2: Ensure kubectl is installed
+    check_and_install_kubectl
+    
+    # Step 3: Start a Kubernetes cluster
+    start_cluster
+    
+    # Step 4: Verify that the cluster is running using kubectl cluster-info
+    verify_cluster
+    
+    # Step 5: Retrieve the available pods
+    retrieve_pods
+    
+    # Step 6: Display useful information
+    display_info
+}
+
+# Run the main function
+main
