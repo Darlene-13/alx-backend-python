@@ -7,7 +7,7 @@ services:
     restart: always
     env_file: .env
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_DATABASE: ${MYSQL_DB}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -33,10 +33,11 @@ services:
     container_name: messaging_app_web
     restart: always
     env_file: .env
+    command: python3 manage.py runserver 0.0.0:8000
     ports:
       - "8000:8000"
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_DATABASE: ${MYSQL_DB}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
@@ -45,7 +46,7 @@ services:
         condition: service_healthy
     volumes:
     # Mount source code for development
-      - .:/app 
+      - .:/messaging_app 
     # Persist django static files
       - static_volume:/app/media
     # Persist django logs

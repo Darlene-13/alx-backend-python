@@ -16,6 +16,7 @@ RUN apt-get update && \
         build-essential \
         libssl-dev \
         libffi-dev && \
+        netcat-openbsd && \
         rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
