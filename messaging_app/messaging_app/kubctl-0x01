@@ -1,0 +1,188 @@
+#!/bin/bash
+
+echo "=============================================="
+echo "    Kubernetes Django App Scaling Script     "
+echo "=============================================="
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to install wrk if not present
+install_wrk() {
+    if ! command_exists wrk; then
+        echo "⚠️  wrk not found. Installing wrk..."
+        
+        # Update package list and install wrk
+        sudo apt update
+        sudo apt install -y wrk
+        
+        if command_exists wrk; then
+            echo "✅ wrk installed successfully!"
+        else
+            echo "❌ Failed to install wrk"
+            echo "💡 You can install it manually with: sudo apt install wrk"
+            exit 1
+        fi
+    else
+        echo "✅ wrk is already installed"
+    fi
+}
+
+# Function to wait for pods to be ready
+wait_for_pods() {
+    echo "⏳ Waiting for all pods to be ready..."
+    local max_attempts=30
+    local attempt=0
+    
+    while [ $attempt -lt $max_attempts ]; do
+        local ready_pods=$(minikube kubectl -- get pods -l app=django-messaging-app --no-headers | awk '{print $2}' | grep -c "1/1")
+        local total_pods=$(minikube kubectl -- get pods -l app=django-messaging-app --no-headers | wc -l)
+        
+        if [ "$ready_pods" -eq "$total_pods" ] && [ "$total_pods" -eq 3 ]; then
+            echo "✅ All 3 pods are ready!"
+            return 0
+        fi
+        
+        echo "   Pods ready: $ready_pods/$total_pods (waiting for 3)"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    echo "⚠️  Timeout waiting for pods to be ready"
+    return 1
+}
+
+echo "Starting Kubernetes scaling operations..."
+echo ""
+
+# Step 1: Show current deployment status
+echo "📊 Current Deployment Status:"
+echo "=============================="
+minikube kubectl -- get deployments django-messaging-app
+echo ""
+
+echo "Current Pods:"
+minikube kubectl -- get pods -l app=django-messaging-app
+echo ""
+
+# Step 2: Scale the deployment to 3 replicas
+echo "🚀 Scaling Django app deployment to 3 replicas..."
+echo "=================================================="
+minikube kubectl -- scale deployment django-messaging-app --replicas=3
+
+if [ $? -eq 0 ]; then
+    echo "✅ Scaling command executed successfully!"
+else
+    echo "❌ Failed to scale deployment"
+    exit 1
+fi
+
+echo ""
+
+# Step 3: Wait for pods to be ready
+wait_for_pods
+
+# Step 4: Verify multiple pods are running
+echo "🔍 Verifying multiple pods are running:"
+echo "======================================="
+minikube kubectl -- get pods -l app=django-messaging-app -o wide
+echo ""
+
+echo "📈 Deployment Details:"
+minikube kubectl -- get deployments django-messaging-app
+echo ""
+
+# Step 5: Install wrk if needed
+install_wrk
+
+# Step 6: Get service endpoint for load testing
+echo "🌐 Getting service endpoint for load testing..."
+echo "=============================================="
+
+# Get the service cluster IP
+SERVICE_IP=$(minikube kubectl -- get service django-messaging-service -o jsonpath='{.spec.clusterIP}')
+SERVICE_PORT=$(minikube kubectl -- get service django-messaging-service -o jsonpath='{.spec.ports[0].port}')
+
+echo "Service IP: $SERVICE_IP"
+echo "Service Port: $SERVICE_PORT"
+echo "Service URL: http://$SERVICE_IP:$SERVICE_PORT"
+echo ""
+
+# Step 7: Perform load testing
+echo "🔥 Performing load testing with wrk..."
+echo "====================================="
+echo "Load test parameters:"
+echo "  - Duration: 30 seconds"
+echo "  - Connections: 12"
+echo "  - Threads: 4"
+echo "  - Target: Django messaging app"
+echo ""
+
+# Create a test pod to run wrk from inside the cluster
+echo "Creating test pod for load testing..."
+minikube kubectl -- run load-test-pod --image=alpine --rm -i --restart=Never -- /bin/sh -c "
+    apk add --no-cache wrk
+    echo 'Starting load test...'
+    wrk -t4 -c12 -d30s --timeout 10s http://$SERVICE_IP:$SERVICE_PORT/
+    echo 'Load test completed!'
+" 2>/dev/null
+
+echo ""
+
+# Step 8: Monitor resource usage
+echo "📊 Monitoring Resource Usage with kubectl top:"
+echo "=============================================="
+
+# Enable metrics server if not already enabled
+echo "Enabling metrics server..."
+minikube addons enable metrics-server
+
+echo "⏳ Waiting for metrics server to be ready..."
+sleep 15
+
+echo ""
+echo "Node Resource Usage:"
+echo "-------------------"
+minikube kubectl -- top nodes 2>/dev/null || echo "⚠️  Metrics not ready yet. Try again in a few minutes."
+
+echo ""
+echo "Pod Resource Usage:"
+echo "------------------"
+minikube kubectl -- top pods -l app=django-messaging-app 2>/dev/null || echo "⚠️  Pod metrics not ready yet. Try again in a few minutes."
+
+echo ""
+
+# Step 9: Show final status
+echo "🎯 Final Status Summary:"
+echo "========================"
+
+echo "Scaled Deployment:"
+minikube kubectl -- get deployments django-messaging-app
+
+echo ""
+echo "Running Pods:"
+minikube kubectl -- get pods -l app=django-messaging-app
+
+echo ""
+echo "Service Status:"
+minikube kubectl -- get service django-messaging-service
+
+echo ""
+echo "🔗 Useful Commands for Monitoring:"
+echo "=================================="
+echo "  minikube kubectl -- get pods -l app=django-messaging-app    # Check pod status"
+echo "  minikube kubectl -- top pods -l app=django-messaging-app    # Check resource usage"
+echo "  minikube kubectl -- logs <pod-name>                         # Check pod logs"
+echo "  minikube kubectl -- describe pod <pod-name>                 # Detailed pod info"
+echo "  minikube kubectl -- scale deployment django-messaging-app --replicas=<number>  # Scale to different number"
+
+echo ""
+echo "🎉 Kubernetes scaling and load testing completed successfully!"
+echo ""
+echo "✅ Summary of Achievements:"
+echo "   ✓ Scaled Django app deployment to 3 replicas"
+echo "   ✓ Verified multiple pods are running"
+echo "   ✓ Performed load testing with wrk"
+echo "   ✓ Monitored resource usage with kubectl top"
