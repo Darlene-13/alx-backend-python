@@ -1,0 +1,75 @@
+# Main production service - switches between blue and green
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-main
+  labels:
+    app: django-messaging-app
+    service-type: main
+spec:
+  selector:
+    app: django-messaging-app
+    version: blue  # Initially points to blue, will switch to green
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# Blue version service (for testing and gradual traffic shift)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-blue
+  labels:
+    app: django-messaging-app
+    service-type: blue
+spec:
+  selector:
+    app: django-messaging-app
+    version: blue
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# Green version service (for testing new version)
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-green
+  labels:
+    app: django-messaging-app
+    service-type: green
+spec:
+  selector:
+    app: django-messaging-app
+    version: green
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+
+---
+# NodePort service for external testing of main service
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-messaging-service-external
+  labels:
+    app: django-messaging-app
+    service-type: external
+spec:
+  selector:
+    app: django-messaging-app
+    version: blue  # Initially points to blue, will switch to green
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30080
+  type: NodePort

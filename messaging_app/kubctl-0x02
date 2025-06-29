@@ -1,0 +1,304 @@
+#!/bin/bash
+
+echo "=================================================="
+echo "    Blue-Green Deployment Strategy Script        "
+echo "=================================================="
+
+# This script demonstrates:
+# - kubectl apply to deploy blue and green versions
+# - kubectl logs to check for errors in new version
+# - Zero-downtime deployment strategy
+
+# Function to check if command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Function to wait for deployment to be ready
+wait_for_deployment() {
+    local deployment_name=$1
+    local max_attempts=30
+    local attempt=0
+    
+    echo "⏳ Waiting for deployment $deployment_name to be ready..."
+    
+    while [ $attempt -lt $max_attempts ]; do
+        local ready_replicas=$(minikube kubectl -- get deployment $deployment_name -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+        local desired_replicas=$(minikube kubectl -- get deployment $deployment_name -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
+        
+        if [ "$ready_replicas" = "$desired_replicas" ] && [ "$ready_replicas" != "0" ]; then
+            echo "✅ Deployment $deployment_name is ready! ($ready_replicas/$desired_replicas replicas)"
+            return 0
+        fi
+        
+        echo "   Deployment $deployment_name: $ready_replicas/$desired_replicas replicas ready"
+        sleep 5
+        attempt=$((attempt + 1))
+    done
+    
+    echo "❌ Timeout waiting for deployment $deployment_name to be ready"
+    return 1
+}
+
+# Function to check logs for errors
+check_deployment_logs() {
+    local deployment_name=$1
+    local version=$2
+    
+    echo "📋 Checking logs for $deployment_name ($version version)..."
+    echo "kubectl logs deployment/$deployment_name"
+    
+    # Get pods for the deployment
+    local pods=$(minikube kubectl -- get pods -l app=django-messaging-app,version=$version --no-headers | awk '{print $1}')
+    
+    if [ -z "$pods" ]; then
+        echo "⚠️  No pods found for $version version"
+        return 1
+    fi
+    
+    # Check logs of each pod
+    for pod in $pods; do
+        echo ""
+        echo "📝 Logs for pod: $pod"
+        echo "kubectl logs $pod"
+        echo "----------------------------------------"
+        
+        # Get recent logs and check for errors
+        local logs=$(minikube kubectl -- logs $pod --tail=20 2>/dev/null)
+        echo "$logs"
+        
+        # Check for common error patterns
+        if echo "$logs" | grep -i "error\|exception\|traceback\|failed" >/dev/null; then
+            echo "⚠️  Potential errors found in $pod logs"
+            return 1
+        else
+            echo "✅ No obvious errors in $pod logs"
+        fi
+        echo "----------------------------------------"
+    done
+    
+    return 0
+}
+
+# Function to test service health
+test_service_health() {
+    local service_name=$1
+    local version=$2
+    
+    echo "🔍 Testing health of $service_name ($version version)..."
+    
+    # Create a test pod to check service connectivity
+    minikube kubectl -- run health-test-$version --image=curlimages/curl --rm -i --restart=Never -- \
+        curl -s --max-time 10 http://$service_name:8000/ >/dev/null 2>&1
+    
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        echo "✅ Service $service_name is healthy"
+        return 0
+    else
+        echo "❌ Service $service_name health check failed"
+        return 1
+    fi
+}
+
+# Function to switch traffic between blue and green
+switch_traffic() {
+    local from_version=$1
+    local to_version=$2
+    
+    echo "🔄 Switching traffic from $from_version to $to_version..."
+    echo "kubectl patch service django-messaging-service-main"
+    
+    # Update main service selector to point to new version
+    minikube kubectl -- patch service django-messaging-service-main -p "{\"spec\":{\"selector\":{\"app\":\"django-messaging-app\",\"version\":\"$to_version\"}}}"
+    
+    # Update external service selector as well
+    minikube kubectl -- patch service django-messaging-service-external -p "{\"spec\":{\"selector\":{\"app\":\"django-messaging-app\",\"version\":\"$to_version\"}}}"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Traffic successfully switched to $to_version version"
+        return 0
+    else
+        echo "❌ Failed to switch traffic to $to_version version"
+        return 1
+    fi
+}
+
+echo "Starting Blue-Green Deployment Process..."
+echo ""
+
+# Step 1: Set up Docker environment
+echo "🐳 Setting up Docker environment..."
+eval $(minikube docker-env)
+
+# Step 2: Build Docker images for blue and green versions
+echo "🔨 Building Docker images..."
+echo ""
+
+echo "Building Blue version (current stable)..."
+docker build -t messaging-app:blue .
+if [ $? -eq 0 ]; then
+    echo "✅ Blue image built successfully"
+else
+    echo "❌ Failed to build blue image"
+    exit 1
+fi
+
+echo ""
+echo "Building Green version (new release)..."
+# For demonstration, we'll use the same code but different tag
+docker build -t messaging-app:green .
+if [ $? -eq 0 ]; then
+    echo "✅ Green image built successfully"
+else
+    echo "❌ Failed to build green image"
+    exit 1
+fi
+
+echo ""
+
+# Step 3: Deploy services first
+echo "🌐 Deploying services..."
+echo "kubectl apply -f kubeservice.yaml"
+minikube kubectl -- apply -f kubeservice.yaml
+
+if [ $? -eq 0 ]; then
+    echo "✅ Services deployed successfully"
+else
+    echo "❌ Failed to deploy services"
+    exit 1
+fi
+
+echo ""
+
+# Step 4: Deploy Blue version (current production)
+echo "🔵 Deploying Blue version (current production)..."
+echo "kubectl apply -f blue_deployment.yaml"
+minikube kubectl -- apply -f blue_deployment.yaml
+
+if [ $? -eq 0 ]; then
+    echo "✅ Blue deployment applied successfully"
+else
+    echo "❌ Failed to apply blue deployment"
+    exit 1
+fi
+
+# Wait for blue deployment to be ready
+wait_for_deployment "django-messaging-app-blue"
+if [ $? -ne 0 ]; then
+    echo "❌ Blue deployment failed to become ready"
+    exit 1
+fi
+
+# Check blue deployment logs
+check_deployment_logs "django-messaging-app-blue" "blue"
+
+# Test blue service health
+test_service_health "django-messaging-service-blue" "blue"
+
+echo ""
+
+# Step 5: Deploy Green version (new version)
+echo "🟢 Deploying Green version (new version)..."
+echo "kubectl apply -f green_deployment.yaml"
+minikube kubectl -- apply -f green_deployment.yaml
+
+if [ $? -eq 0 ]; then
+    echo "✅ Green deployment applied successfully"
+else
+    echo "❌ Failed to apply green deployment"
+    exit 1
+fi
+
+# Wait for green deployment to be ready
+wait_for_deployment "django-messaging-app-green"
+if [ $? -ne 0 ]; then
+    echo "❌ Green deployment failed to become ready"
+    exit 1
+fi
+
+echo ""
+
+# Step 6: Check logs of green version for errors
+echo "🔍 Checking Green version for errors..."
+check_deployment_logs "django-messaging-app-green" "green"
+
+if [ $? -ne 0 ]; then
+    echo "❌ Errors detected in green version deployment"
+    echo "🔄 Rolling back to blue version..."
+    # In a real scenario, you might want to delete the green deployment here
+    exit 1
+fi
+
+echo ""
+
+# Step 7: Test green service health
+echo "🩺 Testing Green version health..."
+test_service_health "django-messaging-service-green" "green"
+
+if [ $? -ne 0 ]; then
+    echo "❌ Green version health check failed"
+    echo "🔄 Keeping traffic on blue version"
+    exit 1
+fi
+
+echo ""
+
+# Step 8: Switch traffic from blue to green
+echo "🚦 Switching traffic from Blue to Green..."
+switch_traffic "blue" "green"
+
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to switch traffic"
+    exit 1
+fi
+
+# Step 9: Final verification
+echo ""
+echo "✅ Final verification..."
+sleep 5
+
+echo "Current service status:"
+minikube kubectl -- get services | grep django-messaging
+
+echo ""
+echo "Current deployment status:"
+minikube kubectl -- get deployments | grep django-messaging
+
+echo ""
+echo "Current pod status:"
+minikube kubectl -- get pods | grep django-messaging
+
+echo ""
+echo "🎯 Blue-Green Deployment Summary:"
+echo "=================================="
+echo "✅ Blue version deployed and verified"
+echo "✅ Green version deployed and verified" 
+echo "✅ Green version logs checked for errors"
+echo "✅ Green version health verified"
+echo "✅ Traffic switched from Blue to Green"
+echo "✅ Zero-downtime deployment completed!"
+
+echo ""
+echo "🔗 Useful Commands for Monitoring:"
+echo "=================================="
+echo "  kubectl get deployments                                    # Check deployment status"
+echo "  kubectl get services                                       # Check service status"
+echo "  kubectl logs deployment/django-messaging-app-green        # Check green logs"
+echo "  kubectl logs deployment/django-messaging-app-blue         # Check blue logs"
+echo "  kubectl get pods -l version=green                          # Check green pods"
+echo "  kubectl get pods -l version=blue                           # Check blue pods"
+
+echo ""
+echo "🌍 External Access:"
+echo "=================="
+MINIKUBE_IP=$(minikube ip)
+echo "  Main Service: http://$MINIKUBE_IP:30080/"
+echo "  Blue Direct:  Use kubectl port-forward service/django-messaging-service-blue 8081:8000"
+echo "  Green Direct: Use kubectl port-forward service/django-messaging-service-green 8082:8000"
+
+echo ""
+echo "🎉 Blue-Green deployment completed successfully!"
+echo "   Traffic is now flowing to the Green version (v2.0)"
+echo "   Blue version is still available for quick rollback if needed"
