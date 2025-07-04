@@ -1,7 +1,7 @@
-pipeline {
-    agent {
-        docker {
-            image 'python:3.9'
+pipeline{
+    agent{
+        docker{
+            image 'python: 3.10'
         }
     }
     environment {
@@ -10,10 +10,14 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git(
+                    url: 'https://github.com/Darlene-13/alx-backend-python.git'
+                    branch: 'main',
+                    credentialsId: 'github-credentials'
+                )
             }
         }
-        stage('Install dependencies') {
+        stage('Install Dependencies'){
             steps {
                 sh '''
                     python -m venv $VENV
@@ -24,15 +28,15 @@ pipeline {
             }
         }
         stage('Run Tests') {
-            steps {
+            steps{
                 sh '''
                     . $VENV/bin/activate
-                    pytest messaging_app/tests --junitxml=report.xml
+                    pytest messaging_app/testa --junitxml=report.xml
                 '''
             }
         }
-        stage('Publish Test Report') {
-            steps {
+        stage('Publish Test Report'){
+            steps{
                 junit 'report.xml'
             }
         }
