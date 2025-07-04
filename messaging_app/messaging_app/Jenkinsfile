@@ -1,44 +1,109 @@
 pipeline{
     agent{
         docker{
-            image 'python: 3.10'
+            image 'python:3.10'
+            args '-u root:root' //Runs as root to avoid permission issues
         }
     }
     environment {
-        VENV = 'venv'
+        PYTHONDONTWRITEBYTECODE= '1'
+        PYTHONUNBUFFERED='1'
+        VENV = '.venv'
     }
     stages {
         stage('Checkout') {
             steps {
-                git(
-                    url: 'https://github.com/Darlene-13/alx-backend-python.git'
-                    git branch: 'main',
+                echo 'Checking out our source code from Github'
+                git branch: 'main',
+                    url: 'https://github.com/Darlene-13/alx-backend-python.git',
                     credentialsId: 'github-credentials'
-                )
             }
         }
         stage('Install Dependencies'){
             steps {
+                echo 'Setting up Python environment and installing the dependencies'
                 sh '''
                     python -m venv $VENV
                     . $VENV/bin/activate
                     pip3 install --upgrade pip
-                    pip3 install -r messaging_app/requirements.txt
+
+                    if [ -f messaging_app/requirements.txt ]; then
+                        pip3 install -r messaging_app/requirements.txt
+                    else
+                        echo 'requirements.txt not found, installing basic testing packages'
+                        pip3 install pytest pytest-html pytest-cov
+                    fi
                 '''
             }
         }
         stage('Run Tests') {
             steps{
+                echo 'Running tests using pytest'
                 sh '''
                     . $VENV/bin/activate
-                    pytest messaging_app/testa --junitxml=report.xml
+                    cd messaging_app
+
+                    mkdir -p reports
+
+                    pytest tests/ \
+                        --junitxml=reports/report.xml \
+                        --html=reports/report.html \
+                        --self-contained-html \
+                        --cov=. \
+                        --cov-report=html:reports/coverage \
+                        --cov-report=xml:reports/coverage.xml \
+                        -v || true
                 '''
             }
         }
-        stage('Publish Test Report'){
+
+        stage('Archive Artifacts'){
             steps{
-                junit 'report.xml'
+                echo 'Archiving test reports and artifacts....'
+                archiveArtifacts artifacts: 'messaging_app/reports/**/*',
+                                fingerprint: true,
+                                allowEmptyArchive: true
             }
         }
     }
+    post {
+        always {
+            echo 'Publishing the test results'
+
+            //Publish JUnit test results
+            junit testResults: 'messaging_app/reports/junit.xml',
+                allowEmptyResults: true
+
+            //Publish HTML test reports
+            publishHTML([
+                allowMissing: false,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'messaging_app/reports',
+                reportFiles: 'report.html',
+                reportName: 'PyTest Report'
+            ])
+
+            //Publish coverage report
+            publishHTML([
+                allowMissing: false,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'messaging_app/reports/coverage',
+                reportFiles: 'index.html',
+                reportName: 'Coverage Report'
+            ])
+        }
+        success {
+            echo "Pipeline completed succesfully!"
+        }
+        failure {
+            echo "Pipeline failed. Check the logs for more details."
+        }
+        cleanup {
+            echo "Cleaning up the workspace..."
+            cleanWs()
+        }
+    }
+
 }
