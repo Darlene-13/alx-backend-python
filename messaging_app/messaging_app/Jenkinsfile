@@ -1,0 +1,40 @@
+pipeline {
+    agent {
+        docker {
+            image 'python:3.9'
+        }
+    }
+    environment {
+        VENV = 'venv'
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Install dependencies') {
+            steps {
+                sh '''
+                    python -m venv $VENV
+                    . $VENV/bin/activate
+                    pip install --upgrade pip
+                    pip install -r messaging_app/requirements.txt
+                '''
+            }
+        }
+        stage('Run Tests') {
+            steps {
+                sh '''
+                    . $VENV/bin/activate
+                    pytest messaging_app/tests --junitxml=report.xml
+                '''
+            }
+        }
+        stage('Publish Test Report') {
+            steps {
+                junit 'report.xml'
+            }
+        }
+    }
+}
