@@ -14,9 +14,11 @@ pipeline{
         stage('Checkout') {
             steps {
                 echo 'Checking out our source code from Github'
-                git branch: 'main',
+                git(
+                    branch: 'main',
                     url: 'https://github.com/Darlene-13/alx-backend-python.git',
                     credentialsId: 'github-credentials'
+                )
             }
         }
         stage('Install Dependencies'){
