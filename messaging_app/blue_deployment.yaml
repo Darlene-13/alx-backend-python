@@ -1,75 +1,72 @@
-# Main production service - switches between blue and green
-apiVersion: v1
-kind: Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: django-messaging-service-main
+  name: django-messaging-app-blue
   labels:
-    app: django-messaging-app
-    service-type: main
-spec:
-  selector:
-    app: django-messaging-app
-    version: blue  # Initially points to blue, will switch to green
-  ports:
-    - protocol: TCP
-      port: 8000
-      targetPort: 8000
-  type: ClusterIP
-
----
-# Blue version service (for testing and gradual traffic shift)
-apiVersion: v1
-kind: Service
-metadata:
-  name: django-messaging-service-blue
-  labels:
-    app: django-messaging-app
-    service-type: blue
-spec:
-  selector:
     app: django-messaging-app
     version: blue
-  ports:
-    - protocol: TCP
-      port: 8000
-      targetPort: 8000
-  type: ClusterIP
-
----
-# Green version service (for testing new version)
-apiVersion: v1
-kind: Service
-metadata:
-  name: django-messaging-service-green
-  labels:
-    app: django-messaging-app
-    service-type: green
 spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
-    app: django-messaging-app
-    version: green
-  ports:
-    - protocol: TCP
-      port: 8000
-      targetPort: 8000
-  type: ClusterIP
-
----
-# NodePort service for external testing of main service
-apiVersion: v1
-kind: Service
-metadata:
-  name: django-messaging-service-external
-  labels:
-    app: django-messaging-app
-    service-type: external
-spec:
-  selector:
-    app: django-messaging-app
-    version: blue  # Initially points to blue, will switch to green
-  ports:
-    - protocol: TCP
-      port: 8000
-      targetPort: 8000
-      nodePort: 30080
-  type: NodePort
+    matchLabels:
+      app: django-messaging-app
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: django-messaging-app
+        version: blue
+    spec:
+      containers:
+      - name: messaging-app
+        image: messaging-app:v2.0
+        ports:
+        - containerPort: 8000
+        env:
+        - name: MYSQL_DB
+          value: "messaging_app"
+        - name: MYSQL_USER
+          value: "messaging_user"
+        - name: MYSQL_PASSWORD
+          value: "#Nasimiyu1"
+        - name: MYSQL_ROOT_PASSWORD
+          value: "#Nasimiyu1"
+        - name: MYSQL_HOST
+          value: "localhost"
+        - name: MYSQL_PORT
+          value: "3306"
+        - name: DJANGO_SECRET_KEY
+          value: "django-insecure-+g1^=&c^c%$c1p%pa!yj&u4)k-6nfdwb!my8kxheia-2(1)fgx"
+        - name: DEBUG
+          value: "True"
+        - name: ALLOWED_HOSTS
+          value: "localhost,127.0.0.1"
+        - name: VERSION
+          value: "blue-v2.0"
+        - name: UPDATE_TYPE
+          value: "rolling-update"
+        imagePullPolicy: Never
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
