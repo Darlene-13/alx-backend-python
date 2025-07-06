@@ -1,15 +1,16 @@
-pipeline{
-    agent{
-        docker{
-            image 'python:3.10'
-            args '-u root:root' //Runs as root to avoid permission issues
-        }
-    }
+pipeline {
+    agent any  // Changed to 'any' to support both Docker containers and Docker commands
+    
     environment {
-        PYTHONDONTWRITEBYTECODE= '1'
-        PYTHONUNBUFFERED='1'
+        PYTHONDONTWRITEBYTECODE = '1'
+        PYTHONUNBUFFERED = '1'
         VENV = '.venv'
+        // Docker environment variables
+        DOCKER_IMAGE_NAME = 'darlene13/messaging-app'  // Replace with your Docker Hub username
+        DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
+        REGISTRY = 'https://index.docker.io/v1/'
     }
+    
     stages {
         stage('Checkout') {
             steps {
@@ -21,7 +22,15 @@ pipeline{
                 )
             }
         }
-        stage('Install Dependencies'){
+        
+        stage('Install Dependencies') {
+            agent {
+                docker {
+                    image 'python:3.10'
+                    args '-u root:root'  // Runs as root to avoid permission issues
+                    reuseNode true  // Important: reuse the node to access checked out code
+                }
+            }
             steps {
                 echo 'Setting up Python environment and installing the dependencies'
                 sh '''
@@ -33,18 +42,36 @@ pipeline{
                         pip3 install -r messaging_app/requirements.txt
                     else
                         echo 'requirements.txt not found, installing basic testing packages'
-                        pip3 install pytest pytest-html pytest-cov
+                        pip3 install pytest pytest-html pytest-cov pytest-django Django
                     fi
                 '''
             }
         }
+        
         stage('Run Tests') {
-            steps{
+            agent {
+                docker {
+                    image 'python:3.10'
+                    args '-u root:root'
+                    reuseNode true
+                }
+            }
+            steps {
                 echo 'Running tests using pytest'
                 sh '''
+                    # Set up environment again in this stage
+                    python -m venv $VENV
                     . $VENV/bin/activate
+                    pip3 install --upgrade pip
+                    
+                    # Install dependencies
+                    if [ -f messaging_app/requirements.txt ]; then
+                        pip3 install -r messaging_app/requirements.txt
+                    else
+                        pip3 install pytest pytest-html pytest-cov pytest-django Django
+                    fi
+                    
                     cd messaging_app
-
                     mkdir -p reports
 
                     pytest tests/ \
@@ -59,24 +86,107 @@ pipeline{
             }
         }
 
-        stage('Archive Artifacts'){
-            steps{
+        stage('Archive Artifacts') {
+            steps {
                 echo 'Archiving test reports and artifacts....'
                 archiveArtifacts artifacts: 'messaging_app/reports/**/*',
                                 fingerprint: true,
                                 allowEmptyArchive: true
             }
         }
+        
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image for messaging app...'
+                script {
+                    dir('messaging_app') {
+                        // Build the Docker image
+                        def dockerImage = docker.build("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}")
+                        
+                        // Also tag as latest
+                        dockerImage.tag("latest")
+                        
+                        // Store image info for later stages
+                        env.DOCKER_IMAGE_ID = dockerImage.id
+                        
+                        echo "✅ Successfully built Docker image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+        
+        stage('Test Docker Image') {
+            steps {
+                echo 'Testing the built Docker image...'
+                script {
+                    // Quick test to ensure the image works
+                    sh """
+                        echo 'Testing if Docker image starts correctly...'
+                        docker run --rm -d --name messaging-app-test -p 8001:8000 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+                        sleep 10
+                        
+                        # Test if the container is running
+                        if docker ps | grep messaging-app-test; then
+                            echo '✅ Docker image test passed - container is running'
+                            docker stop messaging-app-test
+                        else
+                            echo '❌ Docker image test failed - container not running'
+                            docker logs messaging-app-test || true
+                            exit 1
+                        fi
+                    """
+                }
+            }
+        }
+        
+        stage('Push to Docker Hub') {
+            steps {
+                echo 'Pushing Docker image to Docker Hub...'
+                script {
+                    // Login to Docker Hub and push the image
+                    docker.withRegistry("${REGISTRY}", 'dockerhub-credentials') {
+                        def dockerImage = docker.image("${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}")
+                        
+                        // Push both the build-specific tag and latest
+                        dockerImage.push()
+                        dockerImage.push("latest")
+                        
+                        echo "✅ Successfully pushed to Docker Hub:"
+                        echo "   📦 ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                        echo "   📦 ${DOCKER_IMAGE_NAME}:latest"
+                    }
+                }
+            }
+        }
+        
+        stage('Clean Up Docker Images') {
+            steps {
+                echo 'Cleaning up local Docker images to save space...'
+                sh '''
+                    # Remove local images to save space
+                    echo "Removing local Docker images..."
+                    docker rmi ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} || echo "Image already removed"
+                    docker rmi ${DOCKER_IMAGE_NAME}:latest || echo "Latest image already removed"
+                    
+                    # Clean up dangling images
+                    echo "Cleaning up dangling images..."
+                    docker image prune -f || echo "No dangling images to remove"
+                    
+                    echo "✅ Docker cleanup completed"
+                '''
+            }
+        }
     }
+    
     post {
         always {
             echo 'Publishing the test results'
 
-            //Publish JUnit test results
-            junit testResults: 'messaging_app/reports/junit.xml',
+            // Publish JUnit test results
+            junit testResults: 'messaging_app/reports/report.xml',
                 allowEmptyResults: true
 
-            //Publish HTML test reports
+            // Publish HTML test reports
             publishHTML([
                 allowMissing: false,
                 alwaysLinkToLastBuild: true,
@@ -86,7 +196,7 @@ pipeline{
                 reportName: 'PyTest Report'
             ])
 
-            //Publish coverage report
+            // Publish coverage report
             publishHTML([
                 allowMissing: false,
                 alwaysLinkToLastBuild: true,
@@ -96,16 +206,45 @@ pipeline{
                 reportName: 'Coverage Report'
             ])
         }
+        
         success {
-            echo "Pipeline completed succesfully!"
+            echo '''
+            🎉 Pipeline completed successfully!
+            
+            📋 Summary:
+            ✅ Code checked out from GitHub
+            ✅ Dependencies installed
+            ✅ Tests executed and reports generated
+            ✅ Docker image built successfully
+            ✅ Docker image tested
+            ✅ Image pushed to Docker Hub
+            
+            📦 Docker Image Details:
+            🏷️  Image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}
+            🏷️  Latest: ${DOCKER_IMAGE_NAME}:latest
+            🌐 Available at: https://hub.docker.com/r/${DOCKER_IMAGE_NAME}
+            
+            🚀 To run your app locally:
+            docker run -p 8000:8000 ${DOCKER_IMAGE_NAME}:latest
+            '''
         }
+        
         failure {
-            echo "Pipeline failed. Check the logs for more details."
+            echo '''
+            ❌ Pipeline failed! Check the logs for more details.
+            
+            🔍 Common issues to check:
+            • GitHub credentials configuration
+            • Docker Hub credentials setup
+            • Docker daemon availability
+            • Test failures in the application
+            • Missing requirements.txt or dependencies
+            '''
         }
+        
         cleanup {
             echo "Cleaning up the workspace..."
             cleanWs()
         }
     }
-
 }
