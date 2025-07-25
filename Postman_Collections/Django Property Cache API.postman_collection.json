@@ -1,0 +1,219 @@
+{
+	"info": {
+		"_postman_id": "afbd6bd8-59ba-4613-9675-1dbb2782fc61",
+		"name": "Django Property Cache API",
+		"description": "Test endpoints for Django Property Caching System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "46679321",
+		"_collection_link": "https://darlenewendie.postman.co/workspace/Darlene-Wendie's-Workspace~27028d8b-95d7-4712-8fc5-3aae0d40f724/collection/46679321-afbd6bd8-59ba-4613-9675-1dbb2782fc61?action=share&source=collection_link&creator=46679321"
+	},
+	"item": [
+		{
+			"name": "1. Basic Tests",
+			"item": [
+				{
+					"name": "Cache Test",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/properties/cache-test/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"cache-test",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Properties (HTML)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/properties/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Properties (JSON)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/properties/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "2. Cache Management",
+			"item": [
+				{
+					"name": "Cache Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{BASE_URL}}/properties/cache-status/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"cache-status",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Cache",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/properties/cache-clear/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"cache-clear",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "3. Redis Metrics",
+			"item": [
+				{
+					"name": "Redis Metrics (JSON)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{BASE_URL}}/properties/redis-metrics/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"redis-metrics",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cache Load Test",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/properties/cache-load-test/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"cache-load-test",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "4. Signal Testing",
+			"item": [
+				{
+					"name": "Test Signal Invalidation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{BASE_URL}}/properties/test-signals/",
+							"host": [
+								"{{BASE_URL}}"
+							],
+							"path": [
+								"properties",
+								"test-signals",
+								""
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
