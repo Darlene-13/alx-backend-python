@@ -5,6 +5,14 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
 from collections import defaultdict, deque
+from django.http import HttpResponseForbidden
+from django.utils.deprecation import MiddlewareMixin
+from django.utils.timezone import now
+from django.http import HttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from unittest.mock import patch, PropertyMock, Mock
+from django.utils.translation import gettext_lazy as _
 
 class RequestLoggingMiddleware:
     """
@@ -111,6 +119,52 @@ class RestrictAccessByTimeMiddleware:
         
         """
         return self.start_time <= current_time <=self.end_time
+    
+
+
+class RolepermissionMiddleware(MiddlewareMixin):
+    """
+    Middleware that checks the user's role (admin/moderator) before 
+    allowing access to specific actions.
+    """
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+        super().__init__(get_response)
+    
+    def __call__(self, request):
+        # Check if user is authenticated
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden(
+                "Authentication required for this action."
+            )
+        
+        # Check if user has admin or moderator role
+        if not self.is_admin_or_moderator(request.user):
+            return HttpResponseForbidden(
+                "Access denied. Admin or moderator role required."
+            )
+        
+        response = self.get_response(request)
+        return response
+    
+    def is_admin_or_moderator(self, user):
+        """Check if user has admin or moderator role."""
+        # Check if user is superuser (admin)
+        if user.is_superuser or user.is_staff:
+            return True
+        
+        # Check for moderator group (if using Django groups)
+        if user.groups.filter(name__in=['admin', 'moderator']).exists():
+            return True
+        
+        # Check for custom role field (if you have one in your User model)
+        if hasattr(user, 'role'):
+            return user.role in ['admin', 'moderator']
+        
+        return False
+
+
 class OffensiveLanguageMiddleware:
     """
     Mesages that limit the number of chat messaes a user can have with a required window, based on their IP address
